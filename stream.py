@@ -55,7 +55,7 @@ def process_data(cs):
 
 # Get timestamp from few hours ago
 def get_timestamp(diff_in_hours):
-    start_time = datetime.utcnow() - timedelta(hours=5)
+    start_time = datetime.utcnow() - timedelta(hours=diff_in_hours)
     return int(datetime(start_time.year, start_time.month, start_time.day, start_time.hour, start_time.minute).timestamp())*1000
 
 # Add previous few hours data to buffer data
@@ -65,9 +65,13 @@ interval_dict = {'1m' : Client.KLINE_INTERVAL_1MINUTE, '3m' : Client.KLINE_INTER
     '8h' : Client.KLINE_INTERVAL_8HOUR, '12h' : Client.KLINE_INTERVAL_12HOUR, '1d' : Client.KLINE_INTERVAL_1DAY,
     '3d' : Client.KLINE_INTERVAL_3DAY, '1w' : Client.KLINE_INTERVAL_1WEEK, '1M' : Client.KLINE_INTERVAL_1MONTH}
 
+time_dict = {'1m':60, '3m':60*3, '5m':60*5, '15m':60*15, '30m':60*30, '1h':60*60*1, \
+             '2h':60*60*2, '4h':60*60*4, '6h':60*60*6, '8h':60*60*8, '12h':60*60*12, \
+             '1d':60*60*24*1, '3d':60*60*24*3, '1w':60*60*24*7, '1M':60*60*24*30}
+
 def add_previous_data(symbol):
     client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
-    candlesticks = client.get_historical_klines(symbol.upper(), interval_dict[STREAM_INTERVAL], get_timestamp(4))
+    candlesticks = client.get_historical_klines(symbol.upper(), interval_dict[STREAM_INTERVAL], get_timestamp(int((210 * time_dict[STREAM_INTERVAL]/3600)) + 2))
     for d in candlesticks[-200:]: add_buffer_data(float(d[1]), float(d[2]), float(d[3]), float(d[4]), float(d[5]))
 
 # Add new data to the database
@@ -106,7 +110,7 @@ def on_message(ws, message):
         new_data = process_data(cs)
         add_to_database(new_data)
         time_formatted = datetime.fromtimestamp(new_data['timestamp']).strftime("%b %d %H:%M")
-        msg = f"ADDED DATA: {time_formatted} - close {new_data['close']}"
+        msg = f"ADDED DATA: {time_formatted} - close {new_data['close']}, macdhist {round(new_data['macdhist'], 4)}, sar {round(new_data['sar'], 4)}"
         print(msg)
         telegram_bot.send_message(text=msg, chat_id=LOGS_GROUP_CHATID)
 
@@ -114,4 +118,5 @@ def on_message(ws, message):
 stream_socket = f'wss://stream.binance.com:9443/ws/{SYMBOL.lower()}@kline_{STREAM_INTERVAL}'
 ws = websocket.WebSocketApp(stream_socket, on_message=on_message, on_open=on_open, on_close=on_close, on_error=on_error)
 
-ws.run_forever()
+while True:
+    ws.run_forever()
